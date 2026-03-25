@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Onno ter Wisscha</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0f;
+    color: #c4c4c4;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+    overflow: hidden;
+    height: 100dvh;
+    width: 100vw;
+    position: relative;
+  }
+
+  #graph-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* Header overlay */
+  .header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 20px 24px 12px;
+    background: linear-gradient(to bottom, rgba(10,10,15,0.95) 0%, rgba(10,10,15,0.6) 70%, transparent 100%);
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .header h1 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #e8e8e8;
+    letter-spacing: 0.02em;
+  }
+
+  .header p {
+    font-size: 13px;
+    color: #666;
+    margin-top: 2px;
+  }
+
+  /* Node tooltip / detail panel */
+  .detail-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(10,10,15,0.97) 0%, rgba(10,10,15,0.85) 80%, transparent 100%);
+    padding: 40px 24px 32px;
+    z-index: 10;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+  }
+
+  .detail-panel.visible {
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .detail-panel .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+  }
+
+  .detail-panel h2 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #f0f0f0;
+    margin-bottom: 6px;
+  }
+
+  .detail-panel .description {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #999;
+  }
+
+  .detail-panel .connections {
+    margin-top: 12px;
+    font-size: 12px;
+    color: #555;
+  }
+
+  .detail-panel .connections span {
+    color: #777;
+  }
+
+  /* Legend */
+  .legend {
+    position: fixed;
+    top: 80px;
+    right: 16px;
+    z-index: 10;
+    pointer-events: none;
+    opacity: 0.5;
+    transition: opacity 0.3s;
+  }
+
+  .legend:hover {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    font-size: 11px;
+    color: #666;
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Mobile adjustments */
+  @media (max-width: 480px) {
+    .header { padding: 16px 16px 10px; }
+    .header h1 { font-size: 17px; }
+    .header p { font-size: 12px; }
+    .detail-panel { padding: 32px 16px 28px; }
+    .detail-panel h2 { font-size: 19px; }
+    .legend { top: 68px; right: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Onno ter Wisscha</h1>
+  <p>Projecten & verbindingen</p>
+</div>
+
+<div class="legend" id="legend"></div>
+
+<svg id="graph-canvas"></svg>
+
+<div class="detail-panel" id="detail-panel">
+  <div class="tag" id="detail-tag"></div>
+  <h2 id="detail-title"></h2>
+  <div class="description" id="detail-desc"></div>
+  <div class="connections" id="detail-connections"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+// ─── Data ───────────────────────────────────────────────────────────
+const groups = {
+  research:   { label: 'Research',      color: '#b48ead' },
+  financial:  { label: 'Financieel',    color: '#ebcb8b' },
+  maritime:   { label: 'Maritiem',      color: '#88c0d0' },
+  personal:   { label: 'Persoonlijk',   color: '#a3be8c' },
+  social:     { label: 'Sociaal',       color: '#d08770' },
+  genealogy:  { label: 'Genealogie',    color: '#8fbcbb' },
+  automation: { label: 'Automatisering',color: '#81a1c1' },
+  health:     { label: 'Gezondheid',    color: '#bf616a' },
+};
+
+const data = {
+  nodes: [
+    { id: 'Gentherapie Gehoor',    group: 'research',   r: 22, description: 'Onderzoek naar gentherapie, epigenetica en CIRBP voor gehoorverbetering. Vier therapeutische sporen.' },
+    { id: 'Bitcoin & Multisig',    group: 'financial',  r: 18, description: 'Bitcoin holdings, multisig security advies, en financiële runway monitoring.' },
+    { id: 'Plan B',                group: 'financial',  r: 14, description: 'Secundaire inkomensstroom — fallback als de bitcoin-runway krimpt.' },
+    { id: 'Statenjacht De Utrecht',group: 'maritime',   r: 20, description: 'Authentieke reconstructie van een 1746 Statenjacht. Onderhoud, events en marketing.' },
+    { id: 'Stamboom ter Wisscha',  group: 'genealogy',  r: 16, description: 'Negen generaties familiegeschiedenis, van Wessel Klaasen (1700s) tot Olivia (2003).' },
+    { id: 'Verjaardag 2026',       group: 'social',     r: 14, description: '26 april — pizzafeest thuis, Paulaner bier, daarna Koningsnacht de stad in.' },
+    { id: 'Huis & Verbouwing',     group: 'personal',   r: 15, description: 'Keuken, werkplaats, verlichting — doorlopende renovatie aan de Croeselaan.' },
+    { id: 'Muziekproductie',       group: 'personal',   r: 13, description: 'Sheeran Looper X leren, doel: een eigen nummer maken en uitbrengen.' },
+    { id: 'Health & Krav Maga',    group: 'health',     r: 14, description: 'Sterker worden, buikvet kwijtraken, Krav Maga training.' },
+    { id: 'AI & Automatisering',   group: 'automation', r: 16, description: 'Obsidian + CoWork setup, Nachtelijke Maker, agentic AI workflows.' },
+    { id: 'Innovatie Consulting',  group: 'financial',  r: 15, description: 'Ervaring als innovatieconsultant — nu op sabbatical, soms nog advieswerk.' },
+  ],
+  links: [
+    { source: 'Bitcoin & Multisig',     target: 'Plan B',                strength: 0.9 },
+    { source: 'Bitcoin & Multisig',     target: 'Huis & Verbouwing',     strength: 0.5 },
+    { source: 'Plan B',                 target: 'Innovatie Consulting',  strength: 0.6 },
+    { source: 'Gentherapie Gehoor',     target: 'Health & Krav Maga',    strength: 0.4 },
+    { source: 'Statenjacht De Utrecht', target: 'Stamboom ter Wisscha',  strength: 0.5 },
+    { source: 'Verjaardag 2026',        target: 'Huis & Verbouwing',     strength: 0.4 },
+    { source: 'Verjaardag 2026',        target: 'Muziekproductie',       strength: 0.3 },
+    { source: 'AI & Automatisering',    target: 'Innovatie Consulting',  strength: 0.5 },
+    { source: 'AI & Automatisering',    target: 'Gentherapie Gehoor',    strength: 0.3 },
+    { source: 'Muziekproductie',        target: 'Health & Krav Maga',    strength: 0.2 },
+  ]
+};
+
+// ─── Graph setup ────────────────────────────────────────────────────
+const svg = d3.select('#graph-canvas');
+const width = window.innerWidth;
+const height = window.innerHeight;
+svg.attr('width', width).attr('height', height);
+
+// Container for zoom/pan
+const g = svg.append('g');
+
+// Zoom behavior with touch support
+const zoom = d3.zoom()
+  .scaleExtent([0.3, 4])
+  .on('zoom', (event) => {
+    g.attr('transform', event.transform);
+  });
+
+svg.call(zoom);
+
+// Center initially
+svg.call(zoom.transform, d3.zoomIdentity.translate(width / 2, height / 2).scale(0.9));
+
+// ─── Simulation ─────────────────────────────────────────────────────
+const simulation = d3.forceSimulation(data.nodes)
+  .force('link', d3.forceLink(data.links).id(d => d.id).distance(120).strength(d => d.strength * 0.5))
+  .force('charge', d3.forceManyBody().strength(-400))
+  .force('center', d3.forceCenter(0, 0))
+  .force('collision', d3.forceCollide().radius(d => d.r + 10))
+  .alphaDecay(0.02);
+
+// ─── Idle breathing: gentle random drift ────────────────────────────
+// Keep simulation alive with subtle movement
+setInterval(() => {
+  if (!selectedNode) {
+    data.nodes.forEach(n => {
+      n.vx += (Math.random() - 0.5) * 0.3;
+      n.vy += (Math.random() - 0.5) * 0.3;
+    });
+    simulation.alpha(0.03).restart();
+  }
+}, 2000);
+
+// ─── Smooth center on node ──────────────────────────────────────────
+function centerOnNode(d) {
+  const scale = d3.zoomTransform(svg.node()).k;
+  const targetScale = Math.max(scale, 1.1); // zoom in slightly if zoomed out
+  svg.transition()
+    .duration(600)
+    .ease(d3.easeCubicInOut)
+    .call(
+      zoom.transform,
+      d3.zoomIdentity
+        .translate(width / 2, height / 2)
+        .scale(targetScale)
+        .translate(-d.x, -d.y)
+    );
+}
+
+// ─── Links ──────────────────────────────────────────────────────────
+const link = g.append('g')
+  .selectAll('line')
+  .data(data.links)
+  .join('line')
+  .attr('stroke', '#1e2030')
+  .attr('stroke-width', d => d.strength * 2)
+  .attr('stroke-opacity', 0.6);
+
+// ─── Node groups ────────────────────────────────────────────────────
+const node = g.append('g')
+  .selectAll('g')
+  .data(data.nodes)
+  .join('g')
+  .attr('cursor', 'pointer');
+
+// Glow effect
+const defs = svg.append('defs');
+Object.entries(groups).forEach(([key, val]) => {
+  const filter = defs.append('filter').attr('id', `glow-${key}`);
+  filter.append('feGaussianBlur').attr('stdDeviation', '4').attr('result', 'coloredBlur');
+  const feMerge = filter.append('feMerge');
+  feMerge.append('feMergeNode').attr('in', 'coloredBlur');
+  feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+});
+
+// Outer glow circle
+node.append('circle')
+  .attr('r', d => d.r + 4)
+  .attr('fill', d => groups[d.group].color)
+  .attr('opacity', 0.15)
+  .attr('filter', d => `url(#glow-${d.group})`);
+
+// Main circle
+node.append('circle')
+  .attr('r', d => d.r)
+  .attr('fill', d => groups[d.group].color)
+  .attr('opacity', 0.85)
+  .attr('stroke', d => groups[d.group].color)
+  .attr('stroke-width', 1.5)
+  .attr('stroke-opacity', 0.3);
+
+// Inner dot
+node.append('circle')
+  .attr('r', d => d.r * 0.3)
+  .attr('fill', '#0a0a0f')
+  .attr('opacity', 0.4);
+
+// Labels
+node.append('text')
+  .text(d => d.id)
+  .attr('text-anchor', 'middle')
+  .attr('dy', d => d.r + 16)
+  .attr('font-size', d => Math.max(10, d.r * 0.55))
+  .attr('fill', '#666')
+  .attr('font-family', '-apple-system, BlinkMacSystemFont, sans-serif')
+  .attr('font-weight', 400);
+
+// ─── Interaction ────────────────────────────────────────────────────
+let selectedNode = null;
+
+function getConnections(nodeId) {
+  return data.links
+    .filter(l => l.source.id === nodeId || l.target.id === nodeId)
+    .map(l => l.source.id === nodeId ? l.target.id : l.source.id);
+}
+
+function selectNode(event, d) {
+  event.stopPropagation();
+  selectedNode = d;
+
+  // Smooth pan to center the selected node
+  centerOnNode(d);
+
+  // Highlight selected, dim others
+  node.selectAll('circle')
+    .transition().duration(200)
+    .attr('opacity', (n) => {
+      const connections = getConnections(d.id);
+      if (n.id === d.id) return 1;
+      if (connections.includes(n.id)) return 0.7;
+      return 0.15;
+    });
+
+  node.selectAll('text')
+    .transition().duration(200)
+    .attr('fill', (n) => {
+      const connections = getConnections(d.id);
+      if (n.id === d.id) return '#e8e8e8';
+      if (connections.includes(n.id)) return '#888';
+      return '#333';
+    });
+
+  link.transition().duration(200)
+    .attr('stroke', l => (l.source.id === d.id || l.target.id === d.id) ? groups[d.group].color : '#1e2030')
+    .attr('stroke-opacity', l => (l.source.id === d.id || l.target.id === d.id) ? 0.6 : 0.1);
+
+  // Show detail panel
+  const panel = document.getElementById('detail-panel');
+  const tag = document.getElementById('detail-tag');
+  const title = document.getElementById('detail-title');
+  const desc = document.getElementById('detail-desc');
+  const conn = document.getElementById('detail-connections');
+
+  tag.textContent = groups[d.group].label;
+  tag.style.background = groups[d.group].color + '22';
+  tag.style.color = groups[d.group].color;
+  title.textContent = d.id;
+  desc.textContent = d.description;
+
+  const connections = getConnections(d.id);
+  conn.innerHTML = connections.length > 0
+    ? 'Verbonden met: ' + connections.map(c => `<span>${c}</span>`).join(', ')
+    : '';
+
+  panel.classList.add('visible');
+}
+
+function deselectAll() {
+  selectedNode = null;
+
+  // Zoom back out to overview
+  svg.transition()
+    .duration(500)
+    .ease(d3.easeCubicInOut)
+    .call(zoom.transform, d3.zoomIdentity.translate(width / 2, height / 2).scale(0.9));
+
+  node.selectAll('circle')
+    .transition().duration(300)
+    .attr('opacity', (d, i) => {
+      // Restore original opacities
+      return i % 3 === 0 ? 0.15 : i % 3 === 1 ? 0.85 : 0.4;
+    });
+
+  // Simpler approach: re-set original opacities
+  node.each(function(d) {
+    const circles = d3.select(this).selectAll('circle');
+    circles.filter((_, i) => i === 0).transition().duration(300).attr('opacity', 0.15);
+    circles.filter((_, i) => i === 1).transition().duration(300).attr('opacity', 0.85);
+    circles.filter((_, i) => i === 2).transition().duration(300).attr('opacity', 0.4);
+  });
+
+  node.selectAll('text')
+    .transition().duration(300)
+    .attr('fill', '#666');
+
+  link.transition().duration(300)
+    .attr('stroke', '#1e2030')
+    .attr('stroke-opacity', 0.6);
+
+  document.getElementById('detail-panel').classList.remove('visible');
+}
+
+node.on('click', selectNode);
+node.on('touchend', selectNode);
+svg.on('click', deselectAll);
+
+// ─── Drag ───────────────────────────────────────────────────────────
+const drag = d3.drag()
+  .on('start', (event, d) => {
+    if (!event.active) simulation.alphaTarget(0.1).restart();
+    d.fx = d.x;
+    d.fy = d.y;
+  })
+  .on('drag', (event, d) => {
+    d.fx = event.x;
+    d.fy = event.y;
+  })
+  .on('end', (event, d) => {
+    if (!event.active) simulation.alphaTarget(0);
+    d.fx = null;
+    d.fy = null;
+  });
+
+node.call(drag);
+
+// ─── Tick ───────────────────────────────────────────────────────────
+simulation.on('tick', () => {
+  link
+    .attr('x1', d => d.source.x)
+    .attr('y1', d => d.source.y)
+    .attr('x2', d => d.target.x)
+    .attr('y2', d => d.target.y);
+
+  node.attr('transform', d => `translate(${d.x},${d.y})`);
+});
+
+// ─── Legend ──────────────────────────────────────────────────────────
+const legendEl = document.getElementById('legend');
+Object.entries(groups).forEach(([key, val]) => {
+  // Only show groups that have nodes
+  if (data.nodes.some(n => n.group === key)) {
+    legendEl.innerHTML += `
+      <div class="legend-item">
+        <div class="legend-dot" style="background:${val.color}"></div>
+        ${val.label}
+      </div>`;
+  }
+});
+
+// ─── Resize ─────────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  svg.attr('width', w).attr('height', h);
+});
+
+// ─── Entrance animation ────────────────────────────────────────────
+// Start with nodes invisible, fade in
+node.attr('opacity', 0)
+  .transition()
+  .delay((d, i) => i * 80)
+  .duration(600)
+  .attr('opacity', 1);
+
+link.attr('opacity', 0)
+  .transition()
+  .delay(400)
+  .duration(800)
+  .attr('opacity', 1);
+</script>
+</body>
+</html>
