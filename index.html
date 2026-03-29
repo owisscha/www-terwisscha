@@ -148,8 +148,8 @@
 
   .preview-container iframe {
     width: 100%;
-    height: calc(70vh - 180px);
-    min-height: 300px;
+    height: 35vh;
+    min-height: 200px;
     border: none;
     background: #0a0a0f;
   }
@@ -157,8 +157,8 @@
   /* Open full link */
   .open-full {
     display: none;
-    margin-top: 10px;
-    text-align: center;
+    margin-top: 4px;
+    margin-bottom: 10px;
   }
 
   .detail-panel.expanded .open-full {
@@ -254,11 +254,11 @@
   </div>
   <div class="description" id="detail-desc"></div>
   <div class="connections" id="detail-connections"></div>
-  <div class="preview-container" id="preview-container">
-    <iframe id="preview-iframe" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>
-  </div>
   <div class="open-full" id="open-full">
     <a id="open-full-link" href="#" target="_blank" rel="noopener">Open volledig &#8599;</a>
+  </div>
+  <div class="preview-container" id="preview-container">
+    <iframe id="preview-iframe" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>
   </div>
 </div>
 
