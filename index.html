@@ -48,23 +48,35 @@
     margin-top: 2px;
   }
 
-  /* Node tooltip / detail panel */
+  /* Detail panel — small (no product) */
   .detail-panel {
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
-    background: linear-gradient(to top, rgba(10,10,15,0.97) 0%, rgba(10,10,15,0.85) 80%, transparent 100%);
-    padding: 40px 24px 32px;
-    z-index: 10;
+    background: rgba(10,10,15,0.97);
+    border-top: 1px solid #1e2030;
+    padding: 24px 24px 28px;
+    z-index: 20;
     transform: translateY(100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    pointer-events: none;
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    max-height: 200px;
+    overflow: hidden;
   }
 
   .detail-panel.visible {
     transform: translateY(0);
-    pointer-events: auto;
+  }
+
+  .detail-panel.expanded {
+    max-height: 70vh;
+  }
+
+  .detail-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
   }
 
   .detail-panel .tag {
@@ -75,14 +87,14 @@
     text-transform: uppercase;
     padding: 3px 8px;
     border-radius: 4px;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
 
   .detail-panel h2 {
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 600;
     color: #f0f0f0;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
   }
 
   .detail-panel .description {
@@ -92,13 +104,88 @@
   }
 
   .detail-panel .connections {
-    margin-top: 12px;
+    margin-top: 8px;
     font-size: 12px;
     color: #555;
   }
 
   .detail-panel .connections span {
     color: #777;
+  }
+
+  /* Close button */
+  .close-btn {
+    background: none;
+    border: 1px solid #333;
+    color: #666;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-left: 12px;
+    transition: all 0.2s;
+  }
+
+  .close-btn:hover { border-color: #666; color: #aaa; }
+
+  /* Iframe preview */
+  .preview-container {
+    margin-top: 12px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #111;
+    display: none;
+  }
+
+  .detail-panel.expanded .preview-container {
+    display: block;
+  }
+
+  .preview-container iframe {
+    width: 100%;
+    height: calc(70vh - 180px);
+    min-height: 300px;
+    border: none;
+    background: #0a0a0f;
+  }
+
+  /* Open full link */
+  .open-full {
+    display: none;
+    margin-top: 10px;
+    text-align: center;
+  }
+
+  .detail-panel.expanded .open-full {
+    display: block;
+  }
+
+  .open-full a {
+    display: inline-block;
+    padding: 10px 24px;
+    background: #1e2030;
+    color: #88c0d0;
+    text-decoration: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+    border: 1px solid #2a2d40;
+  }
+
+  .open-full a:hover {
+    background: #2a2d40;
+    color: #a3d4e0;
+  }
+
+  /* Link indicator on nodes */
+  .link-ring {
+    pointer-events: none;
   }
 
   /* Legend */
@@ -138,8 +225,10 @@
     .header { padding: 16px 16px 10px; }
     .header h1 { font-size: 17px; }
     .header p { font-size: 12px; }
-    .detail-panel { padding: 32px 16px 28px; }
-    .detail-panel h2 { font-size: 19px; }
+    .detail-panel { padding: 20px 16px 24px; }
+    .detail-panel h2 { font-size: 18px; }
+    .detail-panel.expanded { max-height: 80vh; }
+    .preview-container iframe { height: calc(80vh - 170px); min-height: 250px; }
     .legend { top: 68px; right: 12px; }
   }
 </style>
@@ -148,7 +237,7 @@
 
 <div class="header">
   <h1>Onno ter Wisscha</h1>
-  <p>Projecten & verbindingen</p>
+  <p>Projecten, tools & verbindingen</p>
 </div>
 
 <div class="legend" id="legend"></div>
@@ -156,15 +245,28 @@
 <svg id="graph-canvas"></svg>
 
 <div class="detail-panel" id="detail-panel">
-  <div class="tag" id="detail-tag"></div>
-  <h2 id="detail-title"></h2>
+  <div class="detail-top">
+    <div>
+      <div class="tag" id="detail-tag"></div>
+      <h2 id="detail-title"></h2>
+    </div>
+    <button class="close-btn" onclick="deselectAll()" aria-label="Sluiten">&times;</button>
+  </div>
   <div class="description" id="detail-desc"></div>
   <div class="connections" id="detail-connections"></div>
+  <div class="preview-container" id="preview-container">
+    <iframe id="preview-iframe" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>
+  </div>
+  <div class="open-full" id="open-full">
+    <a id="open-full-link" href="#" target="_blank" rel="noopener">Open volledig &#8599;</a>
+  </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <script>
 // ─── Data ───────────────────────────────────────────────────────────
+const MAKER = 'https://maker.terwisscha.com/';
+
 const groups = {
   research:   { label: 'Research',      color: '#b48ead' },
   financial:  { label: 'Financieel',    color: '#ebcb8b' },
@@ -178,17 +280,17 @@ const groups = {
 
 const data = {
   nodes: [
-    { id: 'Gentherapie Gehoor',    group: 'research',   r: 22, description: 'Onderzoek naar gentherapie, epigenetica en CIRBP voor gehoorverbetering. Vier therapeutische sporen.' },
-    { id: 'Bitcoin & Multisig',    group: 'financial',  r: 18, description: 'Bitcoin holdings, multisig security advies, en financiële runway monitoring.' },
-    { id: 'Plan B',                group: 'financial',  r: 14, description: 'Secundaire inkomensstroom — fallback als de bitcoin-runway krimpt.' },
-    { id: 'Statenjacht De Utrecht',group: 'maritime',   r: 20, description: 'Authentieke reconstructie van een 1746 Statenjacht. Onderhoud, events en marketing.' },
-    { id: 'Stamboom ter Wisscha',  group: 'genealogy',  r: 16, description: 'Negen generaties familiegeschiedenis, van Wessel Klaasen (1700s) tot Olivia (2003).' },
-    { id: 'Verjaardag 2026',       group: 'social',     r: 14, description: '26 april — pizzafeest thuis, Paulaner bier, daarna Koningsnacht de stad in.' },
-    { id: 'Huis & Verbouwing',     group: 'personal',   r: 15, description: 'Keuken, werkplaats, verlichting — doorlopende renovatie aan de Croeselaan.' },
-    { id: 'Muziekproductie',       group: 'personal',   r: 13, description: 'Sheeran Looper X leren, doel: een eigen nummer maken en uitbrengen.' },
-    { id: 'Health & Krav Maga',    group: 'health',     r: 14, description: 'Sterker worden, buikvet kwijtraken, Krav Maga training.' },
-    { id: 'AI & Automatisering',   group: 'automation', r: 16, description: 'Obsidian + CoWork setup, Nachtelijke Maker, agentic AI workflows.' },
-    { id: 'Innovatie Consulting',  group: 'financial',  r: 15, description: 'Ervaring als innovatieconsultant — nu op sabbatical, soms nog advieswerk.' },
+    { id: 'Gentherapie Gehoor',    group: 'research',   r: 22, url: MAKER + 'myo6-research-dashboard',    description: 'Onderzoek naar gentherapie, epigenetica en CIRBP voor gehoorverbetering. Vier therapeutische sporen.' },
+    { id: 'Bitcoin & Multisig',    group: 'financial',  r: 18, url: MAKER + 'bitcoin-runway-dashboard',   description: 'Bitcoin holdings, multisig security advies, en financiële runway monitoring.' },
+    { id: 'Plan B',                group: 'financial',  r: 14, url: MAKER + 'plan-b-trigger-calculator',  description: 'Secundaire inkomensstroom — fallback als de bitcoin-runway krimpt.' },
+    { id: 'Statenjacht De Utrecht',group: 'maritime',   r: 20, url: MAKER + 'statenjacht',                description: 'Authentieke reconstructie van een 1746 Statenjacht. Onderhoud, events en marketing.' },
+    { id: 'Stamboom ter Wisscha',  group: 'genealogy',  r: 16,                                            description: 'Negen generaties familiegeschiedenis, van Wessel Klaasen (1700s) tot Olivia (2003).' },
+    { id: 'Verjaardag 2026',       group: 'social',     r: 14, url: MAKER + 'party-planner',              description: '26 april — pizzafeest thuis, Paulaner bier, daarna Koningsnacht de stad in.' },
+    { id: 'Huis & Verbouwing',     group: 'personal',   r: 15,                                            description: 'Keuken, werkplaats, verlichting — doorlopende renovatie aan de Croeselaan.' },
+    { id: 'Muziekproductie',       group: 'personal',   r: 13,                                            description: 'Sheeran Looper X leren, doel: een eigen nummer maken en uitbrengen.' },
+    { id: 'Health & Krav Maga',    group: 'health',     r: 14,                                            description: 'Sterker worden, buikvet kwijtraken, Krav Maga training.' },
+    { id: 'AI & Automatisering',   group: 'automation', r: 16, url: MAKER,                                description: 'Obsidian + CoWork setup, Nachtelijke Maker, agentic AI workflows.' },
+    { id: 'Innovatie Consulting',  group: 'financial',  r: 15,                                            description: 'Ervaring als innovatieconsultant — nu op sabbatical, soms nog advieswerk.' },
   ],
   links: [
     { source: 'Bitcoin & Multisig',     target: 'Plan B',                strength: 0.9 },
@@ -210,10 +312,8 @@ const width = window.innerWidth;
 const height = window.innerHeight;
 svg.attr('width', width).attr('height', height);
 
-// Container for zoom/pan
 const g = svg.append('g');
 
-// Zoom behavior with touch support
 const zoom = d3.zoom()
   .scaleExtent([0.3, 4])
   .on('zoom', (event) => {
@@ -221,8 +321,6 @@ const zoom = d3.zoom()
   });
 
 svg.call(zoom);
-
-// Center initially
 svg.call(zoom.transform, d3.zoomIdentity.translate(width / 2, height / 2).scale(0.9));
 
 // ─── Simulation ─────────────────────────────────────────────────────
@@ -233,8 +331,7 @@ const simulation = d3.forceSimulation(data.nodes)
   .force('collision', d3.forceCollide().radius(d => d.r + 10))
   .alphaDecay(0.02);
 
-// ─── Idle breathing: gentle random drift ────────────────────────────
-// Keep simulation alive with subtle movement
+// ─── Idle breathing ─────────────────────────────────────────────────
 setInterval(() => {
   if (!selectedNode) {
     data.nodes.forEach(n => {
@@ -248,7 +345,7 @@ setInterval(() => {
 // ─── Smooth center on node ──────────────────────────────────────────
 function centerOnNode(d) {
   const scale = d3.zoomTransform(svg.node()).k;
-  const targetScale = Math.max(scale, 1.1); // zoom in slightly if zoomed out
+  const targetScale = Math.max(scale, 1.1);
   svg.transition()
     .duration(600)
     .ease(d3.easeCubicInOut)
@@ -309,6 +406,17 @@ node.append('circle')
   .attr('fill', '#0a0a0f')
   .attr('opacity', 0.4);
 
+// Link indicator ring — dashed outer ring for nodes with a product URL
+node.filter(d => d.url)
+  .append('circle')
+  .attr('class', 'link-ring')
+  .attr('r', d => d.r + 8)
+  .attr('fill', 'none')
+  .attr('stroke', d => groups[d.group].color)
+  .attr('stroke-width', 1)
+  .attr('stroke-dasharray', '3,3')
+  .attr('opacity', 0.35);
+
 // Labels
 node.append('text')
   .text(d => d.id)
@@ -332,7 +440,6 @@ function selectNode(event, d) {
   event.stopPropagation();
   selectedNode = d;
 
-  // Smooth pan to center the selected node
   centerOnNode(d);
 
   // Highlight selected, dim others
@@ -364,6 +471,8 @@ function selectNode(event, d) {
   const title = document.getElementById('detail-title');
   const desc = document.getElementById('detail-desc');
   const conn = document.getElementById('detail-connections');
+  const iframe = document.getElementById('preview-iframe');
+  const openLink = document.getElementById('open-full-link');
 
   tag.textContent = groups[d.group].label;
   tag.style.background = groups[d.group].color + '22';
@@ -376,31 +485,36 @@ function selectNode(event, d) {
     ? 'Verbonden met: ' + connections.map(c => `<span>${c}</span>`).join(', ')
     : '';
 
+  // Handle iframe for nodes with products
+  if (d.url) {
+    panel.classList.add('expanded');
+    iframe.src = d.url;
+    openLink.href = d.url;
+  } else {
+    panel.classList.remove('expanded');
+    iframe.src = 'about:blank';
+    openLink.href = '#';
+  }
+
   panel.classList.add('visible');
 }
 
 function deselectAll() {
   selectedNode = null;
 
-  // Zoom back out to overview
+  // Zoom back out
   svg.transition()
     .duration(500)
     .ease(d3.easeCubicInOut)
     .call(zoom.transform, d3.zoomIdentity.translate(width / 2, height / 2).scale(0.9));
 
-  node.selectAll('circle')
-    .transition().duration(300)
-    .attr('opacity', (d, i) => {
-      // Restore original opacities
-      return i % 3 === 0 ? 0.15 : i % 3 === 1 ? 0.85 : 0.4;
-    });
-
-  // Simpler approach: re-set original opacities
-  node.each(function(d) {
+  // Restore opacities
+  node.each(function() {
     const circles = d3.select(this).selectAll('circle');
     circles.filter((_, i) => i === 0).transition().duration(300).attr('opacity', 0.15);
     circles.filter((_, i) => i === 1).transition().duration(300).attr('opacity', 0.85);
     circles.filter((_, i) => i === 2).transition().duration(300).attr('opacity', 0.4);
+    circles.filter((_, i) => i === 3).transition().duration(300).attr('opacity', 0.35);
   });
 
   node.selectAll('text')
@@ -411,7 +525,13 @@ function deselectAll() {
     .attr('stroke', '#1e2030')
     .attr('stroke-opacity', 0.6);
 
-  document.getElementById('detail-panel').classList.remove('visible');
+  const panel = document.getElementById('detail-panel');
+  panel.classList.remove('visible');
+  // Clean up iframe after transition
+  setTimeout(() => {
+    panel.classList.remove('expanded');
+    document.getElementById('preview-iframe').src = 'about:blank';
+  }, 350);
 }
 
 node.on('click', selectNode);
@@ -451,7 +571,6 @@ simulation.on('tick', () => {
 // ─── Legend ──────────────────────────────────────────────────────────
 const legendEl = document.getElementById('legend');
 Object.entries(groups).forEach(([key, val]) => {
-  // Only show groups that have nodes
   if (data.nodes.some(n => n.group === key)) {
     legendEl.innerHTML += `
       <div class="legend-item">
@@ -469,7 +588,6 @@ window.addEventListener('resize', () => {
 });
 
 // ─── Entrance animation ────────────────────────────────────────────
-// Start with nodes invisible, fade in
 node.attr('opacity', 0)
   .transition()
   .delay((d, i) => i * 80)
