@@ -219,17 +219,36 @@
   /* ── Galerij ─────────────────────────────────────── */
   .filter-kop{font-size:.83rem; color:var(--muted); margin-bottom:12px}
   .filters{display:flex; flex-wrap:wrap; gap:9px; margin-bottom:24px}
+  /* Elk label draagt de kleur die het in de lijst ook heeft, zodat de knop en
+     de linkerrand van de tegels bij elkaar horen. Inactief blijft de tekst
+     licht: gekleurde tekst op klein formaat leest slecht op donker. */
   .chip{
+    --c:#8896ab;
     font-family:inherit; font-size:.9rem; font-weight:520; cursor:pointer;
-    background:var(--card); color:var(--txt); border:1px solid #26344a;
-    border-radius:999px; padding:9px 17px; transition:all .18s;
+    background:var(--card); color:var(--txt);
+    border:1px solid color-mix(in srgb, var(--c) 38%, var(--border));
+    border-radius:999px; padding:9px 15px 9px 13px; transition:all .18s;
+    display:inline-flex; align-items:center; gap:8px;
   }
-  .chip:hover{background:var(--card-hover); border-color:#3a4d6b; transform:translateY(-1px)}
+  .chip::before{
+    content:''; width:8px; height:8px; border-radius:50%;
+    background:var(--c); opacity:.85; flex-shrink:0;
+  }
+  .chip[data-filter="all"]::before{display:none}
+  .chip[data-filter="all"]{padding-left:15px}
+  .chip:hover{
+    background:color-mix(in srgb, var(--c) 9%, var(--card-hover));
+    border-color:color-mix(in srgb, var(--c) 62%, var(--border));
+    transform:translateY(-1px);
+  }
   .chip.active{
-    background:rgba(79,156,247,.2); border-color:var(--blue); color:#a8ccfa;
-    box-shadow:0 0 0 3px rgba(79,156,247,.1);
+    background:color-mix(in srgb, var(--c) 19%, transparent);
+    border-color:var(--c);
+    color:color-mix(in srgb, var(--c) 42%, #ffffff);
+    box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 11%, transparent);
   }
-  .chip .n{opacity:.6; margin-left:6px; font-variant-numeric:tabular-nums; font-weight:400}
+  .chip.active::before{opacity:1}
+  .chip .n{opacity:.6; margin-left:2px; font-variant-numeric:tabular-nums; font-weight:400}
 
   .tegel{
     display:block; position:relative; background:var(--card);
@@ -610,6 +629,8 @@ function bouwFilters(labels){
   const maak = (slug, naam, n) => {
     const b = document.createElement('button');
     b.className = 'chip' + (slug === actief ? ' active' : '');
+    b.dataset.filter = slug;
+    if (KLEUR[slug]) b.style.setProperty('--c', KLEUR[slug]);
     b.innerHTML = '<span class="t"></span><span class="n"></span>';
     b.querySelector('.t').textContent = naam;
     b.querySelector('.n').textContent = n;
